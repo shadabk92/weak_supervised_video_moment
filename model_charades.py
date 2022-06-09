@@ -14,7 +14,7 @@ def l2norm(X):
     """L2-normalize columns of X
     """
     norm = torch.pow(X, 2).sum(dim=1).sqrt()
-    X = X / norm[:,None]
+    X = X / norm[:, None]
     return X
 
 
@@ -24,7 +24,7 @@ def EncoderImage(data_name, img_dim, embed_size, finetune=False,
     precomputed image features, `EncoderImagePrecomp`, or an encoder that
     computes image features on the fly `EncoderImageFull`. We used Precomp
     """
-    #print img_dim
+    # print img_dim
     if data_name.endswith('_precomp'):
         img_enc = EncoderImagePrecomp(
             img_dim, embed_size, use_abs, no_imgnorm)
@@ -69,10 +69,10 @@ class EncoderImageFull(nn.Module):
         """Load a pretrained CNN and parallelize over GPUs
         """
         if pretrained:
-            #print("=> using pre-trained model '{}'".format(arch))
+            # print("=> using pre-trained model '{}'".format(arch))
             model = models.__dict__[arch](pretrained=True)
         else:
-            #print("=> creating model '{}'".format(arch))
+            # print("=> creating model '{}'".format(arch))
             model = models.__dict__[arch]()
 
         if arch.startswith('alexnet') or arch.startswith('vgg'):
@@ -111,27 +111,24 @@ class EncoderImageFull(nn.Module):
 
         return features
 
-		
-		
 
 def cross_attention(x1, x2, dim=2):
     """Returns cosine similarity based attentionbetween x1 and x2, computed along dim."""
-    w1=torch.bmm(x1, x2.unsqueeze(2))
+    w1 = torch.bmm(x1, x2.unsqueeze(2))
     return w1
-	
-	
-		
+
+
 class EncoderImagePrecomp(nn.Module):
 
-    def __init__(self, img_dim, embed_size, use_abs=False,no_imgnorm=False):
+    def __init__(self, img_dim, embed_size, use_abs=False, no_imgnorm=False):
         super(EncoderImagePrecomp, self).__init__()
         self.embed_size = embed_size
         self.no_imgnorm = no_imgnorm
         self.use_abs = use_abs
-			
+
         self.ws1 = nn.Linear(img_dim, embed_size)
         self.softmax = nn.Softmax(0)
-        self.fc = nn.Linear(embed_size, embed_size)	
+        self.fc = nn.Linear(embed_size, embed_size)
 
         self.init_weights()
 
@@ -143,30 +140,29 @@ class EncoderImagePrecomp(nn.Module):
         self.fc.weight.data.uniform_(-r, r)
         self.fc.bias.data.fill_(0)
         r1 = np.sqrt(6.) / np.sqrt(self.ws1.in_features +
-                                  self.ws1.out_features)
+                                   self.ws1.out_features)
         self.ws1.weight.data.uniform_(-r, r)
         self.ws1.bias.data.fill_(0)
-		
 
-    def forward(self, images, cap_embs,lengths_img):
+    def forward(self, images, cap_embs, lengths_img):
         """Extract image feature vectors."""
         # assuming that the precomputed features are already l2-normalized
         size = images.size()
 
-        image_feature=self.ws1(images)
-        attn_weights=cross_attention(image_feature, cap_embs, dim=2)
+        image_feature = self.ws1(images)
+        attn_weights = cross_attention(image_feature, cap_embs, dim=2)
 
-        att_weights_s=torch.zeros(attn_weights.shape)
-			
+        att_weights_s = torch.zeros(attn_weights.shape)
+
         for i in range(size[0]):
-            temp=self.softmax(attn_weights[i,0:lengths_img[i],:])
-            att_weights_s[i,0:lengths_img[i],:] = temp.data
+            temp = self.softmax(attn_weights[i, 0:lengths_img[i], :])
+            att_weights_s[i, 0:lengths_img[i], :] = temp.data
 
-        attn_weights=Variable(att_weights_s.cuda())
-        out=torch.bmm(image_feature.transpose(1,2),attn_weights)
+        attn_weights = Variable(att_weights_s.cuda())
+        out = torch.bmm(image_feature.transpose(1, 2), attn_weights)
 
-        out=torch.squeeze(out)
-        
+        out = torch.squeeze(out)
+
         features = self.fc(out)
 
         # normalize in the joint embedding space
@@ -228,7 +224,7 @@ class EncoderText(nn.Module):
         # Reshape *final* output to (batch_size, hidden_size)
         padded = pad_packed_sequence(out, batch_first=True)
         I = torch.LongTensor(lengths).view(-1, 1, 1)
-        I = Variable(I.expand(x.size(0), 1, self.embed_size)-1).cuda()
+        I = Variable(I.expand(x.size(0), 1, self.embed_size) - 1).cuda()
         out = torch.gather(padded[0], 1, I).squeeze(1)
 
         # normalization in the joint embedding space
@@ -255,7 +251,7 @@ def order_sim(im, s):
     score = -YmX.clamp(min=0).pow(2).sum(2).squeeze(2).sqrt().t()
     return score
 
-		
+
 class ContrastiveLoss(nn.Module):
     """
     Compute contrastive loss
@@ -278,11 +274,11 @@ class ContrastiveLoss(nn.Module):
         diagonal = scores.diag().view(im.size(0), 1)
         d1 = diagonal.expand_as(scores)
         d2 = diagonal.t().expand_as(scores)
-        
+
         # compare every diagonal score to scores in its column
         # caption retrieval
         cost_s = (self.margin + scores - d1).clamp(min=0)
-		
+
         # compare every diagonal score to scores in its row
         # image retrieval
         cost_im = (self.margin + scores - d2).clamp(min=0)
@@ -299,8 +295,9 @@ class ContrastiveLoss(nn.Module):
             cost_s = cost_s.max(1)[0]
             cost_im = cost_im.max(0)[0]
 
-        return cost_s.sum() + cost_im.sum()		
-		
+        return cost_s.sum() + cost_im.sum()
+
+
 class VSE(object):
     """
     rkiros/uvs model
@@ -368,10 +365,10 @@ class VSE(object):
 
         # Forward
         cap_init_emb = self.txt_enc(captions, lengths)
-        img_emb, attn_weights = self.img_enc(images,cap_init_emb,lengths_img)
-        cap_emp=cap_init_emb
+        img_emb, attn_weights = self.img_enc(images, cap_init_emb, lengths_img)
+        cap_emb = cap_init_emb
         return img_emb, cap_emb, attn_weights
-		
+
     def forward_emb_image(self, images, volatile=False):
         """Compute the image and caption embeddings
         """
@@ -380,14 +377,14 @@ class VSE(object):
 
         if torch.cuda.is_available():
             images = images.cuda()
-            #captions = captions.cuda()
+            # captions = captions.cuda()
 
         # Forward
         img_emb = self.img_enc(images)
         return img_emb
 
     def forward_emb_caption(self, captions, lengths, volatile=False):
-        #"""Compute the image and caption embeddings"""
+        # """Compute the image and caption embeddings"""
         # Set mini-batch dataset
         captions = Variable(captions, volatile=volatile)
         if torch.cuda.is_available():
@@ -396,7 +393,7 @@ class VSE(object):
         # Forward
         cap_emb = self.txt_enc(captions, lengths)
         return cap_emb
-		
+
     def forward_loss(self, img_emb, cap_emb, **kwargs):
         """Compute the loss given pairs of image and caption embeddings
         """
@@ -425,5 +422,5 @@ class VSE(object):
             clip_grad_norm(self.params, self.grad_clip)
         self.optimizer.step()
 
-		
-		
+
+
